@@ -5,6 +5,7 @@ pipeline {
     DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
     IMAGE_NAME = "ahmedmohamed1242001/backend"
     KUBE_NAMESPACE = "default"
+    GIT_REPO = "https://github.com/ahmedmohamedrafat00-cpu/devops-project.git"
   }
 
   stages {
@@ -45,14 +46,13 @@ pipeline {
     stage('Deploy to EKS (Helm)') {
       steps {
         sh '''
-          echo "Deploying to EKS using Helm..."
-          pwd
-          ls -l k8s
-          ls -l k8s/charts
-          ls -l k8s/charts/backend
+          echo "Cloning full repo for Helm..."
+          rm -rf helm-workspace
+          git clone ${GIT_REPO} helm-workspace
 
-          cd k8s/charts/backend
+          cd helm-workspace/k8s/charts/backend
 
+          echo "Deploying with Helm..."
           helm upgrade --install backend . \
             --set image.repository=${IMAGE_NAME} \
             --set image.tag=${BUILD_NUMBER} \
@@ -64,10 +64,10 @@ pipeline {
 
   post {
     success {
-      echo "CI/CD Pipeline Finished Successfully"
+      echo "✅ CI/CD Pipeline Finished Successfully"
     }
     failure {
-      echo "CI/CD Pipeline Failed"
+      echo "❌ CI/CD Pipeline Failed"
     }
   }
 }
