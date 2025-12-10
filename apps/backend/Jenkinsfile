@@ -50,6 +50,15 @@ pipeline {
           rm -rf helm-workspace
           git clone ${GIT_REPO} helm-workspace
 
+          echo "========== DEBUG =========="
+          pwd
+          ls -la
+          ls -la helm-workspace
+          ls -la helm-workspace/k8s || true
+          ls -la helm-workspace/k8s/charts || true
+          ls -la helm-workspace/k8s/charts/backend || true
+          echo "==========================="
+
           cd helm-workspace/k8s/charts/backend
 
           echo "Deploying with Helm..."
