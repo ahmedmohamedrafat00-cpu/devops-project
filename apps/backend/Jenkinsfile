@@ -1,27 +1,25 @@
 pipeline {
   agent any
-
   environment {
     DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
     IMAGE_NAME = "ahmedmohamed1242001/backend"
     KUBE_NAMESPACE = "default"
     GIT_REPO = "https://github.com/ahmedmohamedrafat00-cpu/devops-project.git"
+    AWS_REGION = "eu-west-1"
+    EKS_CLUSTER_NAME = "devops-project-eks"
+    AWS_ACCOUNT_ID = "985539792593"
   }
-
   stages {
-
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
-
     stage('Build') {
       steps {
         sh 'echo "No build step yet (nginx test image)"'
       }
     }
-
     stage('Docker Build & Push') {
       steps {
         script {
@@ -42,38 +40,53 @@ pipeline {
         }
       }
     }
-
     stage('Deploy to EKS (Helm)') {
       steps {
-        sh '''
-          echo "Cloning full repo for Helm..."
-          rm -rf helm-workspace
-          git clone ${GIT_REPO} helm-workspace
-
-          echo "========== DEBUG =========="
-          pwd
-          ls -la
-          ls -la helm-workspace
-          ls -la helm-workspace/k8s || true
-          ls -la helm-workspace/k8s/charts || true
-          ls -la helm-workspace/k8s/charts/backend || true
-          echo "==========================="
-
-          cd helm-workspace/k8s/charts/backend
-
-          echo "Deploying with Helm..."
-          helm upgrade --install backend . \
-            --set image.repository=${IMAGE_NAME} \
-            --set image.tag=${BUILD_NUMBER} \
-            --namespace ${KUBE_NAMESPACE}
-        '''
+        withCredentials([
+          string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+          string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+          sh '''
+            echo "Configuring AWS and kubectl for EKS..."
+            echo "Target: ${EKS_CLUSTER_NAME} in ${AWS_REGION} (Account: ${AWS_ACCOUNT_ID})"
+            
+            # Configure AWS credentials
+            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+            aws configure set region ${AWS_REGION}
+            
+            # Update kubeconfig for EKS cluster
+            aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
+            
+            # Verify connection
+            echo "Testing cluster connection..."
+            kubectl get nodes
+            
+            echo "Cloning full repo for Helm..."
+            rm -rf helm-workspace
+            git clone ${GIT_REPO} helm-workspace
+            cd helm-workspace/k8s/charts/backend
+            
+            echo "Deploying with Helm..."
+            helm upgrade --install backend . \
+              --set image.repository=${IMAGE_NAME} \
+              --set image.tag=${BUILD_NUMBER} \
+              --namespace ${KUBE_NAMESPACE} \
+              --wait \
+              --timeout 5m
+            
+            echo "Deployment completed!"
+            kubectl get pods -n ${KUBE_NAMESPACE} -l app=backend
+          '''
+        }
       }
     }
   }
-
   post {
     success {
       echo "✅ CI/CD Pipeline Finished Successfully"
+      echo "🚀 Deployed ${IMAGE_NAME}:${BUILD_NUMBER} to EKS cluster: ${EKS_CLUSTER_NAME}"
+      echo "📍 Region: ${AWS_REGION}"
     }
     failure {
       echo "❌ CI/CD Pipeline Failed"
