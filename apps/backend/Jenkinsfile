@@ -1,0 +1,55 @@
+pipeline {
+  agent any
+
+  environment {
+    DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
+    IMAGE_NAME = "ahmedmohamed1242001/backend"
+    CHART_PATH = "k8s/charts/backend"
+    KUBE_NAMESPACE = "default"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh 'echo "No build step yet (nginx test image)"'
+      }
+    }
+
+    stage('Docker Build & Push') {
+      steps {
+        script {
+          withCredentials([usernamePassword(
+            credentialsId: env.DOCKERHUB_CREDENTIALS,
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )]) {
+            sh '''
+              docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+              echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+              docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy to EKS (Helm)') {
+      steps {
+        sh """
+          cd ../../${CHART_PATH}
+          helm upgrade --install backend . \
+            --set image.repository=${IMAGE_NAME} \
+            --set image.tag=${BUILD_NUMBER} \
+            --namespace ${KUBE_NAMESPACE}
+        """
+      }
+    }
+  }
+}
