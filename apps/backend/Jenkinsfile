@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
-    IMAGE_NAME = "ahmedmohamed1242001/backend"
+    IMAGE_NAME = "ahmedmohamed1242001/backend"   // ✅ Docker Hub username is already correct
     CHART_PATH = "k8s/charts/backend"
     KUBE_NAMESPACE = "default"
   }
@@ -31,6 +31,7 @@ pipeline {
             passwordVariable: 'DOCKER_PASS'
           )]) {
             sh '''
+              cd apps/backend
               docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
               echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
               docker push ${IMAGE_NAME}:${BUILD_NUMBER}
@@ -43,13 +44,22 @@ pipeline {
     stage('Deploy to EKS (Helm)') {
       steps {
         sh """
-          cd ../../${CHART_PATH}
+          cd ${CHART_PATH}
           helm upgrade --install backend . \
             --set image.repository=${IMAGE_NAME} \
             --set image.tag=${BUILD_NUMBER} \
             --namespace ${KUBE_NAMESPACE}
         """
       }
+    }
+  }
+
+  post {
+    success {
+      echo "CI/CD Pipeline Finished Successfully"
+    }
+    failure {
+      echo "CI/CD Pipeline Failed"
     }
   }
 }
